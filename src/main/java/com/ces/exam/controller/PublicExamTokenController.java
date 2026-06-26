@@ -1,5 +1,6 @@
 package com.ces.exam.controller;
 
+import com.ces.exam.payload.request.StartByTokenRequest;
 import com.ces.exam.payload.request.SubmitSessionRequest;
 import com.ces.exam.payload.response.SessionResultResponse;
 import com.ces.exam.payload.response.SessionStartResponse;
@@ -25,8 +26,11 @@ public class PublicExamTokenController {
     }
 
     @PostMapping("/{token}/start")
-    public ResponseEntity<SessionStartResponse> startSession(@PathVariable String token) {
-        return ResponseEntity.ok(examSessionService.startSessionByToken(token));
+    public ResponseEntity<SessionStartResponse> startSession(
+            @PathVariable String token,
+            @RequestBody(required = false) StartByTokenRequest request) {
+        String candidateName = request != null ? request.getCandidateName() : null;
+        return ResponseEntity.ok(examSessionService.startSessionByToken(token, candidateName));
     }
 
     @GetMapping("/{token}/sessions/{sessionId}")

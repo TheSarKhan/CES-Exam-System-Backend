@@ -24,4 +24,21 @@ public interface ExamAssignmentRepository extends JpaRepository<ExamAssignment, 
     @Query("SELECT a FROM ExamAssignment a JOIN FETCH a.exam LEFT JOIN FETCH a.assignedUser " +
            "WHERE a.accessToken = :token")
     Optional<ExamAssignment> findByAccessToken(@Param("token") String token);
+
+    boolean existsByExamIdAndAssignedUserId(Long examId, Long userId);
+
+    boolean existsByExamIdAndAssignedDepartmentId(Long examId, Long departmentId);
+
+    long countByExamId(Long examId);
+
+    @Query("SELECT a FROM ExamAssignment a LEFT JOIN FETCH a.assignedUser " +
+           "WHERE a.exam.id = :examId AND a.accessToken IS NOT NULL AND a.consumed = false " +
+           "ORDER BY a.createdAt DESC")
+    List<ExamAssignment> findPendingLinks(@Param("examId") Long examId);
+
+    // Recipient e-mails that already used (consumed) a link for this exam — their remaining
+    // unused links are redundant and should be hidden from the "unused links" list.
+    @Query("SELECT DISTINCT LOWER(a.recipientEmail) FROM ExamAssignment a " +
+           "WHERE a.exam.id = :examId AND a.consumed = true AND a.recipientEmail IS NOT NULL")
+    List<String> findUsedRecipientEmails(@Param("examId") Long examId);
 }

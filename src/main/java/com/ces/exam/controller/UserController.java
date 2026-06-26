@@ -48,4 +48,18 @@ public class UserController {
         userService.deactivateUser(id);
         return ResponseEntity.ok().build();
     }
+
+    @PostMapping("/{id}/activate")
+    public ResponseEntity<?> activateUser(@PathVariable Long id) {
+        userService.activateUser(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/{id}/reset-password")
+    public ResponseEntity<?> resetPassword(
+            @PathVariable Long id,
+            @Valid @RequestBody com.ces.exam.payload.request.ResetPasswordRequest request) {
+        userService.resetPassword(id, request.getPassword());
+        return ResponseEntity.ok().build();
+    }
 }

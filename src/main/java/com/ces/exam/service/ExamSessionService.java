@@ -6,6 +6,7 @@ import com.ces.exam.model.entity.*;
 import com.ces.exam.model.enums.ExamType;
 import com.ces.exam.model.enums.QuestionType;
 import com.ces.exam.model.enums.SessionStatus;
+import com.ces.exam.payload.request.GradeSessionRequest;
 import com.ces.exam.payload.request.SessionAnswerRequest;
 import com.ces.exam.payload.request.StartSessionRequest;
 import com.ces.exam.payload.request.SubmitSessionRequest;
@@ -30,15 +31,24 @@ public class ExamSessionService {
     private final ExamSessionRepository sessionRepository;
     private final QuestionRepository questionRepository;
     private final QuestionOptionRepository questionOptionRepository;
+    private final SessionViolationRepository violationRepository;
+    private final CandidateService candidateService;
+    private final SettingsService settingsService;
 
     public ExamSessionService(ExamAssignmentRepository assignmentRepository,
                               ExamSessionRepository sessionRepository,
                               QuestionRepository questionRepository,
-                              QuestionOptionRepository questionOptionRepository) {
+                              QuestionOptionRepository questionOptionRepository,
+                              SessionViolationRepository violationRepository,
+                              CandidateService candidateService,
+                              SettingsService settingsService) {
         this.assignmentRepository = assignmentRepository;
         this.sessionRepository = sessionRepository;
         this.questionRepository = questionRepository;
         this.questionOptionRepository = questionOptionRepository;
+        this.violationRepository = violationRepository;
+        this.candidateService = candidateService;
+        this.settingsService = settingsService;
     }
 
     @Transactional
@@ -55,21 +65,25 @@ public class ExamSessionService {
     @Transactional(readOnly = true)
     public TokenAssignmentResponse getAssignmentByToken(String token) {
         ExamAssignment assignment = resolveAssignmentByToken(token);
-        User user = requireAssignedUser(assignment);
         Exam exam = assignment.getExam();
+        User user = assignment.getAssignedUser(); // null for an anonymous link not yet started
 
         String status = "PENDING";
         Long sessionId = null;
-        Optional<ExamSession> existing = sessionRepository.findByAssignmentIdAndUserId(assignment.getId(), user.getId());
-        if (existing.isPresent()) {
-            sessionId = existing.get().getId();
-            status = existing.get().getStatus() == SessionStatus.COMPLETED ? "COMPLETED" : "IN_PROGRESS";
+        String candidateName = null;
+        if (user != null) {
+            candidateName = (user.getFirstName() + " " + user.getLastName()).trim();
+            Optional<ExamSession> existing = sessionRepository.findByAssignmentIdAndUserId(assignment.getId(), user.getId());
+            if (existing.isPresent()) {
+                sessionId = existing.get().getId();
+                status = existing.get().getStatus() == SessionStatus.COMPLETED ? "COMPLETED" : "IN_PROGRESS";
+            }
         }
 
         return new TokenAssignmentResponse(
                 exam.getTitle(),
                 exam.getDescription(),
-                user.getFirstName() + " " + user.getLastName(),
+                candidateName,
                 exam.getDurationMinutes(),
                 assignment.getStartDate(),
                 assignment.getEndDate(),
@@ -79,10 +93,24 @@ public class ExamSessionService {
     }
 
     @Transactional
-    public SessionStartResponse startSessionByToken(String token) {
+    public SessionStartResponse startSessionByToken(String token, String candidateName) {
         ExamAssignment assignment = resolveAssignmentByToken(token);
         validateAssignmentDates(assignment);
-        User user = requireAssignedUser(assignment);
+
+        // Single-use: a consumed link can no longer start a new session.
+        if (assignment.isConsumed()) {
+            throw new ValidationException("Bu link artıq istifadə olunub.");
+        }
+
+        User user = assignment.getAssignedUser();
+        if (user == null) {
+            // Anonymous link → the taker names themselves now; create their account.
+            user = candidateService.create(candidateName);
+            assignment.setAssignedUser(user);
+        }
+        assignment.setConsumed(true);
+        assignmentRepository.save(assignment);
+
         return startSessionForAssignment(assignment, user);
     }
 
@@ -99,7 +127,7 @@ public class ExamSessionService {
     @Transactional
     public SessionResultResponse submitSessionByToken(String token, Long sessionId, SubmitSessionRequest request) {
         ExamSession session = loadSessionForToken(token, sessionId);
-        return submitSessionInternal(session, request);
+        return maskIfHidden(submitSessionInternal(session, request));
     }
 
     @Transactional(readOnly = true)
@@ -108,8 +136,15 @@ public class ExamSessionService {
         if (session.getStatus() != SessionStatus.COMPLETED) {
             throw new ValidationException("Session not yet completed");
         }
-        return mapToResultResponse(sessionRepository.findByIdWithDetails(sessionId)
-                .orElseThrow(() -> new ResourceNotFoundException("Session not found")));
+        return maskIfHidden(mapToResultResponse(sessionRepository.findByIdWithDetails(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found"))));
+    }
+
+    /** Candidate (token) results are hidden when the admin disabled "show result to candidate". */
+    private SessionResultResponse maskIfHidden(SessionResultResponse full) {
+        if (settingsService.isShowResultToCandidate()) return full;
+        return SessionResultResponse.hidden(full.getSessionId(), full.getExamTitle(), full.getStatus(),
+                full.getStartTime(), full.getEndTime(), full.getTerminationReason());
     }
 
     private SessionStartResponse startSessionForAssignment(ExamAssignment assignment, User user) {
@@ -127,7 +162,10 @@ public class ExamSessionService {
         }
 
         Exam exam = assignment.getExam();
-        List<Question> selectedQuestions = pickRandomQuestions(exam);
+        List<Question> selectedQuestions = selectQuestions(exam);
+        if (settingsService.isShuffleQuestions()) {
+            Collections.shuffle(selectedQuestions);
+        }
 
         ExamSession session = new ExamSession();
         session.setAssignment(assignment);
@@ -159,13 +197,6 @@ public class ExamSessionService {
                 .orElseThrow(() -> new ResourceNotFoundException("Invalid or expired exam link"));
     }
 
-    private User requireAssignedUser(ExamAssignment assignment) {
-        if (assignment.getAssignedUser() == null) {
-            throw new ValidationException("This exam link is not valid for individual access");
-        }
-        return assignment.getAssignedUser();
-    }
-
     private void validateSessionBelongsToToken(ExamSession session, String token) {
         String assignmentToken = session.getAssignment().getAccessToken();
         if (assignmentToken == null || !assignmentToken.equals(token)) {
@@ -193,52 +224,166 @@ public class ExamSessionService {
         Map<Long, SessionAnswerRequest> answerMap = request.getAnswers().stream()
                 .collect(Collectors.toMap(SessionAnswerRequest::getQuestionId, a -> a, (a, b) -> b));
 
-        BigDecimal earnedScore = BigDecimal.ZERO;
-        BigDecimal maxScore = BigDecimal.ZERO;
+        // Manual grading only applies to real exams; surveys are never scored/graded.
+        boolean gradable = session.getAssignment().getExam().getType() == ExamType.EXAM;
 
         for (ExamSessionQuestion sq : session.getSessionQuestions()) {
             Question question = sq.getQuestion();
-            maxScore = maxScore.add(question.getScore() != null ? question.getScore() : BigDecimal.ONE);
-
             SessionAnswerRequest answer = answerMap.get(question.getId());
-            if (answer == null) continue;
 
-            if (answer.getSelectedOptionId() != null) {
-                QuestionOption option = questionOptionRepository.findById(answer.getSelectedOptionId())
-                        .orElseThrow(() -> new ResourceNotFoundException("Option not found"));
-                sq.setSelectedOption(option);
-            }
-            if (answer.getSelectedOptionIds() != null && !answer.getSelectedOptionIds().isEmpty()) {
-                Set<QuestionOption> options = new HashSet<>(questionOptionRepository.findAllById(answer.getSelectedOptionIds()));
-                sq.setSelectedOptions(options);
-            }
-            if (answer.getTextAnswer() != null) {
-                sq.setTextAnswer(answer.getTextAnswer());
+            if (answer != null) {
+                if (answer.getSelectedOptionId() != null) {
+                    QuestionOption option = questionOptionRepository.findById(answer.getSelectedOptionId())
+                            .orElseThrow(() -> new ResourceNotFoundException("Option not found"));
+                    sq.setSelectedOption(option);
+                }
+                if (answer.getSelectedOptionIds() != null && !answer.getSelectedOptionIds().isEmpty()) {
+                    Set<QuestionOption> options = new HashSet<>(questionOptionRepository.findAllById(answer.getSelectedOptionIds()));
+                    sq.setSelectedOptions(options);
+                }
+                if (answer.getTextAnswer() != null) {
+                    sq.setTextAnswer(answer.getTextAnswer());
+                }
             }
 
+            BigDecimal qScore = question.getScore() != null ? question.getScore() : BigDecimal.ONE;
             Boolean correct = evaluateAnswer(question, sq);
-            sq.setIsCorrect(correct);
-            if (Boolean.TRUE.equals(correct)) {
-                earnedScore = earnedScore.add(question.getScore() != null ? question.getScore() : BigDecimal.ONE);
+            if (correct == null) {
+                boolean blank = sq.getTextAnswer() == null || sq.getTextAnswer().isBlank();
+                if (gradable && !blank) {
+                    sq.setIsCorrect(null);            // open-ended exam answer → awaits manual grading
+                    sq.setAwardedScore(null);
+                } else if (gradable) {
+                    sq.setIsCorrect(false);           // blank exam answer → zero, nothing to grade
+                    sq.setAwardedScore(BigDecimal.ZERO);
+                } else {
+                    sq.setIsCorrect(null);            // survey response → not scored, not graded
+                    sq.setAwardedScore(null);
+                }
+            } else {
+                sq.setIsCorrect(correct);
+                sq.setAwardedScore(Boolean.TRUE.equals(correct) ? qScore : BigDecimal.ZERO);
             }
         }
 
-        Exam exam = session.getAssignment().getExam();
-        BigDecimal percentageScore = maxScore.compareTo(BigDecimal.ZERO) > 0
-                ? earnedScore.multiply(BigDecimal.valueOf(100)).divide(maxScore, 2, RoundingMode.HALF_UP)
+        recomputeScore(session);
+        session.setStatus(SessionStatus.COMPLETED);
+        session.setEndTime(LocalDateTime.now());
+        // A CRITICAL violation is only ever emitted when the anti-cheat limit is reached,
+        // i.e. the exam was auto-terminated rather than submitted by the candidate.
+        if (wasProctoringTerminated(request.getViolations())) {
+            session.setTerminationReason("PROCTORING");
+        }
+        sessionRepository.save(session);
+
+        saveViolations(session, request.getViolations());
+
+        return mapToResultResponse(session);
+    }
+
+    /** True when the submitted violations include the CRITICAL strike that the anti-cheat limit triggers. */
+    private boolean wasProctoringTerminated(List<SubmitSessionRequest.ViolationRequest> violations) {
+        if (violations == null) return false;
+        return violations.stream()
+                .anyMatch(v -> v != null && "CRITICAL".equalsIgnoreCase(v.getSeverity()));
+    }
+
+    private void saveViolations(ExamSession session, List<SubmitSessionRequest.ViolationRequest> violations) {
+        if (violations == null || violations.isEmpty()) return;
+        List<SessionViolation> entities = new ArrayList<>();
+        for (SubmitSessionRequest.ViolationRequest v : violations) {
+            if (v.getType() == null) continue;
+            SessionViolation sv = new SessionViolation();
+            sv.setSession(session);
+            sv.setType(v.getType());
+            sv.setLabel(v.getLabel());
+            sv.setSeverity(v.getSeverity() != null ? v.getSeverity() : "LOGGED");
+            LocalDateTime when = v.getAt() != null
+                    ? LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(v.getAt()), java.time.ZoneId.systemDefault())
+                    : LocalDateTime.now();
+            sv.setOccurredAt(when);
+            entities.add(sv);
+        }
+        if (!entities.isEmpty()) violationRepository.saveAll(entities);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ViolationResponse> getSessionViolations(Long sessionId) {
+        return violationRepository.findBySessionIdOrderByOccurredAtAsc(sessionId).stream()
+                .map(v -> new ViolationResponse(v.getType(), v.getLabel(), v.getSeverity(), v.getOccurredAt()))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Recomputes a session's percentage score and pass/fail from per-answer awarded
+     * points. While any answer still awaits manual grading the pass/fail verdict is
+     * left null (we can't decide yet); the score reflects what's graded so far.
+     */
+    private void recomputeScore(ExamSession session) {
+        BigDecimal earned = BigDecimal.ZERO;
+        BigDecimal max = BigDecimal.ZERO;
+        int pending = 0;
+
+        for (ExamSessionQuestion sq : session.getSessionQuestions()) {
+            BigDecimal qScore = sq.getQuestion().getScore() != null ? sq.getQuestion().getScore() : BigDecimal.ONE;
+            max = max.add(qScore);
+            if (sq.getIsCorrect() == null) {
+                pending++;
+            } else if (sq.getAwardedScore() != null) {
+                earned = earned.add(sq.getAwardedScore());
+            } else if (Boolean.TRUE.equals(sq.getIsCorrect())) {
+                earned = earned.add(qScore);
+            }
+        }
+
+        BigDecimal percentageScore = max.compareTo(BigDecimal.ZERO) > 0
+                ? earned.multiply(BigDecimal.valueOf(100)).divide(max, 2, RoundingMode.HALF_UP)
                 : BigDecimal.ZERO;
 
+        Exam exam = session.getAssignment().getExam();
         Boolean passed = null;
-        if (exam.getType() == ExamType.EXAM && exam.getPassMark() != null) {
+        if (pending == 0 && exam.getType() == ExamType.EXAM && exam.getPassMark() != null) {
             passed = percentageScore.compareTo(exam.getPassMark()) >= 0;
         }
 
         session.setScore(percentageScore);
         session.setPassed(passed);
-        session.setStatus(SessionStatus.COMPLETED);
-        session.setEndTime(LocalDateTime.now());
-        sessionRepository.save(session);
+    }
 
+    @Transactional
+    public SessionResultResponse gradeSession(Long sessionId, GradeSessionRequest request) {
+        ExamSession session = sessionRepository.findByIdWithDetails(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
+        if (session.getStatus() != SessionStatus.COMPLETED) {
+            throw new ValidationException("Yalnız tamamlanmış sessiyalar qiymətləndirilə bilər.");
+        }
+
+        Map<Long, BigDecimal> gradeMap = new HashMap<>();
+        if (request.getGrades() != null) {
+            for (GradeSessionRequest.AnswerGrade g : request.getGrades()) {
+                if (g.getQuestionId() != null && g.getAwardedScore() != null) {
+                    gradeMap.put(g.getQuestionId(), g.getAwardedScore());
+                }
+            }
+        }
+
+        for (ExamSessionQuestion sq : session.getSessionQuestions()) {
+            // Only answers awaiting manual grading can be (re)graded here.
+            if (sq.getIsCorrect() != null) continue;
+            BigDecimal awarded = gradeMap.get(sq.getQuestion().getId());
+            if (awarded == null) continue;
+
+            BigDecimal qScore = sq.getQuestion().getScore() != null ? sq.getQuestion().getScore() : BigDecimal.ONE;
+            if (awarded.compareTo(BigDecimal.ZERO) < 0) awarded = BigDecimal.ZERO;
+            if (awarded.compareTo(qScore) > 0) awarded = qScore;
+
+            sq.setAwardedScore(awarded);
+            // Full marks counts as "correct"; partial/zero keeps its points but isn't "correct".
+            sq.setIsCorrect(awarded.compareTo(qScore) >= 0);
+        }
+
+        recomputeScore(session);
+        sessionRepository.save(session);
         return mapToResultResponse(session);
     }
 
@@ -256,6 +401,13 @@ public class ExamSessionService {
         }
 
         return mapToStartResponse(session);
+    }
+
+    @Transactional(readOnly = true)
+    public SessionResultResponse getSessionResultForAdmin(Long sessionId) {
+        ExamSession session = sessionRepository.findByIdWithDetails(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
+        return mapToResultResponse(session);
     }
 
     @Transactional(readOnly = true)
@@ -315,10 +467,21 @@ public class ExamSessionService {
         }).collect(Collectors.toList());
     }
 
+    private List<Question> selectQuestions(Exam exam) {
+        // A concrete, ordered question list takes precedence (built in the exam builder).
+        if (exam.getExamQuestions() != null && !exam.getExamQuestions().isEmpty()) {
+            return exam.getExamQuestions().stream()
+                    .sorted(Comparator.comparing(eq -> eq.getSortOrder() != null ? eq.getSortOrder() : 0))
+                    .map(ExamQuestion::getQuestion)
+                    .collect(Collectors.toList());
+        }
+        return pickRandomQuestions(exam);
+    }
+
     private List<Question> pickRandomQuestions(Exam exam) {
         List<Question> result = new ArrayList<>();
         if (exam.getTopicConfigs() == null || exam.getTopicConfigs().isEmpty()) {
-            throw new ValidationException("Exam has no topic configurations");
+            throw new ValidationException("Exam has no questions");
         }
 
         for (ExamTopicConfig config : exam.getTopicConfigs()) {
@@ -378,8 +541,9 @@ public class ExamSessionService {
 
     private SessionStartResponse mapToStartResponse(ExamSession session) {
         Exam exam = session.getAssignment().getExam();
+        boolean shuffleOptions = settingsService.isShuffleOptions();
         List<SessionQuestionResponse> questions = session.getSessionQuestions().stream()
-                .map(sq -> mapQuestionForSession(sq.getQuestion()))
+                .map(sq -> mapQuestionForSession(sq.getQuestion(), session.getId(), shuffleOptions))
                 .collect(Collectors.toList());
 
         return new SessionStartResponse(
@@ -392,10 +556,16 @@ public class ExamSessionService {
         );
     }
 
-    private SessionQuestionResponse mapQuestionForSession(Question question) {
+    private SessionQuestionResponse mapQuestionForSession(Question question, Long sessionId, boolean shuffleOptions) {
         List<SessionQuestionOptionResponse> options = null;
         if (question.getOptions() != null) {
-            options = question.getOptions().stream()
+            List<QuestionOption> ordered = new ArrayList<>(question.getOptions());
+            if (shuffleOptions) {
+                // Deterministic per (session, question, option) so the order is stable across
+                // reloads of the same session, but randomized differently for each candidate.
+                ordered.sort(Comparator.comparingInt(o -> Objects.hash(sessionId, question.getId(), o.getId())));
+            }
+            options = ordered.stream()
                     .map(o -> new SessionQuestionOptionResponse(o.getId(), o.getText(), o.getSortOrder()))
                     .collect(Collectors.toList());
         }
@@ -410,17 +580,47 @@ public class ExamSessionService {
 
     private SessionResultResponse mapToResultResponse(ExamSession session) {
         Exam exam = session.getAssignment().getExam();
-        List<SessionAnswerResultResponse> answers = session.getSessionQuestions().stream()
-                .map(sq -> {
-                    Question q = sq.getQuestion();
-                    String optionText = sq.getSelectedOption() != null ? sq.getSelectedOption().getText() : null;
-                    Long optionId = sq.getSelectedOption() != null ? sq.getSelectedOption().getId() : null;
-                    return new SessionAnswerResultResponse(
-                            q.getId(), q.getText(), q.getType().name(),
-                            optionId, optionText, sq.getTextAnswer(),
-                            sq.getIsCorrect(), q.getScore()
-                    );
-                }).collect(Collectors.toList());
+        boolean isExamType = exam.getType() == ExamType.EXAM;
+
+        List<SessionAnswerResultResponse> answers = new ArrayList<>();
+        BigDecimal earned = BigDecimal.ZERO;
+        BigDecimal max = BigDecimal.ZERO;
+        int pending = 0;
+
+        for (ExamSessionQuestion sq : session.getSessionQuestions()) {
+            Question q = sq.getQuestion();
+            BigDecimal qScore = q.getScore() != null ? q.getScore() : BigDecimal.ONE;
+            max = max.add(qScore);
+
+            boolean needsGrading = isExamType && sq.getIsCorrect() == null;
+            if (needsGrading) {
+                pending++;
+            } else if (sq.getAwardedScore() != null) {
+                earned = earned.add(sq.getAwardedScore());
+            } else if (Boolean.TRUE.equals(sq.getIsCorrect())) {
+                earned = earned.add(qScore);
+            }
+
+            String optionText;
+            Long optionId = null;
+            if (sq.getSelectedOption() != null) {
+                optionText = sq.getSelectedOption().getText();
+                optionId = sq.getSelectedOption().getId();
+            } else if (sq.getSelectedOptions() != null && !sq.getSelectedOptions().isEmpty()) {
+                // Multiple-choice: join all chosen options.
+                optionText = sq.getSelectedOptions().stream()
+                        .map(QuestionOption::getText)
+                        .collect(Collectors.joining(", "));
+            } else {
+                optionText = null;
+            }
+
+            answers.add(new SessionAnswerResultResponse(
+                    q.getId(), q.getText(), q.getType().name(),
+                    optionId, optionText, sq.getTextAnswer(),
+                    sq.getIsCorrect(), qScore, sq.getAwardedScore(), needsGrading
+            ));
+        }
 
         return new SessionResultResponse(
                 session.getId(),
@@ -431,7 +631,11 @@ public class ExamSessionService {
                 exam.getPassMark(),
                 session.getStartTime(),
                 session.getEndTime(),
-                answers
+                answers,
+                pending,
+                earned,
+                max,
+                session.getTerminationReason()
         );
     }
 

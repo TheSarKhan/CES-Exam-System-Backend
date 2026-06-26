@@ -1,10 +1,13 @@
 package com.ces.exam.controller;
 
+import com.ces.exam.payload.request.ForgotPasswordRequest;
 import com.ces.exam.payload.request.LoginRequest;
+import com.ces.exam.payload.request.PasswordResetConfirmRequest;
 import com.ces.exam.payload.response.JwtResponse;
 import com.ces.exam.security.JwtUtil;
 import com.ces.exam.security.TokenBlacklistService;
 import com.ces.exam.security.UserDetailsImpl;
+import com.ces.exam.service.PasswordResetService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,12 +27,15 @@ public class AuthController {
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
     private final TokenBlacklistService tokenBlacklistService;
+    private final PasswordResetService passwordResetService;
 
     public AuthController(AuthenticationManager authenticationManager, JwtUtil jwtUtil,
-                          TokenBlacklistService tokenBlacklistService) {
+                          TokenBlacklistService tokenBlacklistService,
+                          PasswordResetService passwordResetService) {
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.passwordResetService = passwordResetService;
     }
 
     @PostMapping("/login")
@@ -63,6 +69,19 @@ public class AuthController {
             tokenBlacklistService.blacklistToken(authHeader.substring(7));
         }
         SecurityContextHolder.clearContext();
+        return ResponseEntity.ok().build();
+    }
+
+    /** Always returns 200 — never reveals whether the e-mail exists. */
+    @PostMapping("/forgot-password")
+    public ResponseEntity<Void> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+        passwordResetService.requestReset(request.getEmail());
+        return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<Void> resetPassword(@Valid @RequestBody PasswordResetConfirmRequest request) {
+        passwordResetService.resetPassword(request.getToken(), request.getNewPassword());
         return ResponseEntity.ok().build();
     }
 }

@@ -1,5 +1,6 @@
 package com.ces.exam.payload.request;
 
+import com.ces.exam.model.enums.Difficulty;
 import com.ces.exam.model.enums.QuestionType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -18,6 +19,8 @@ public class QuestionRequest {
 
     private BigDecimal score;
 
+    private Difficulty difficulty;
+
     private List<QuestionOptionRequest> options;
 
     public Long getTopicId() { return topicId; }
@@ -28,6 +31,8 @@ public class QuestionRequest {
     public void setText(String text) { this.text = text; }
     public BigDecimal getScore() { return score; }
     public void setScore(BigDecimal score) { this.score = score; }
+    public Difficulty getDifficulty() { return difficulty; }
+    public void setDifficulty(Difficulty difficulty) { this.difficulty = difficulty; }
     public List<QuestionOptionRequest> getOptions() { return options; }
     public void setOptions(List<QuestionOptionRequest> options) { this.options = options; }
 }

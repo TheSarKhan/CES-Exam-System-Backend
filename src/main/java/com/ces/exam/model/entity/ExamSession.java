@@ -37,6 +37,10 @@ public class ExamSession {
 
     private Boolean passed;
 
+    /** Why the session ended automatically; null for a normal submission. e.g. "PROCTORING". */
+    @Column(name = "termination_reason", length = 30)
+    private String terminationReason;
+
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.Set<ExamSessionQuestion> sessionQuestions = new java.util.LinkedHashSet<>();
 
@@ -56,6 +60,8 @@ public class ExamSession {
     public void setScore(BigDecimal score) { this.score = score; }
     public Boolean getPassed() { return passed; }
     public void setPassed(Boolean passed) { this.passed = passed; }
+    public String getTerminationReason() { return terminationReason; }
+    public void setTerminationReason(String terminationReason) { this.terminationReason = terminationReason; }
     public java.util.Set<ExamSessionQuestion> getSessionQuestions() { return sessionQuestions; }
     public void setSessionQuestions(java.util.Set<ExamSessionQuestion> sessionQuestions) {
         this.sessionQuestions = sessionQuestions;

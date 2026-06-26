@@ -32,6 +32,10 @@ public class Exam {
     @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ExamTopicConfig> topicConfigs;
 
+    @OneToMany(mappedBy = "exam", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("sortOrder ASC")
+    private List<ExamQuestion> examQuestions;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -59,6 +63,13 @@ public class Exam {
         this.topicConfigs = topicConfigs;
         if(topicConfigs != null) {
             topicConfigs.forEach(tc -> tc.setExam(this));
+        }
+    }
+    public List<ExamQuestion> getExamQuestions() { return examQuestions; }
+    public void setExamQuestions(List<ExamQuestion> examQuestions) {
+        this.examQuestions = examQuestions;
+        if (examQuestions != null) {
+            examQuestions.forEach(eq -> eq.setExam(this));
         }
     }
 }

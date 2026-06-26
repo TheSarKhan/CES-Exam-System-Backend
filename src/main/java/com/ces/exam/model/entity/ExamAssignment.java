@@ -31,6 +31,14 @@ public class ExamAssignment {
     @Column(name = "access_token", unique = true, length = 36)
     private String accessToken;
 
+    // Optional candidate e-mail for link delivery — used to send / resend the invite.
+    @Column(name = "recipient_email", length = 255)
+    private String recipientEmail;
+
+    // Single-use link guard: set once the exam is started via the link.
+    @Column(nullable = false)
+    private boolean consumed = false;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt = LocalDateTime.now();
 
@@ -48,4 +56,10 @@ public class ExamAssignment {
     public void setEndDate(LocalDateTime endDate) { this.endDate = endDate; }
     public String getAccessToken() { return accessToken; }
     public void setAccessToken(String accessToken) { this.accessToken = accessToken; }
+    public String getRecipientEmail() { return recipientEmail; }
+    public void setRecipientEmail(String recipientEmail) { this.recipientEmail = recipientEmail; }
+    public boolean isConsumed() { return consumed; }
+    public void setConsumed(boolean consumed) { this.consumed = consumed; }
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

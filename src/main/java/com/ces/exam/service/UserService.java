@@ -8,6 +8,9 @@ import com.ces.exam.payload.response.UserResponse;
 import com.ces.exam.repository.DepartmentRepository;
 import com.ces.exam.repository.RoleRepository;
 import com.ces.exam.repository.UserRepository;
+import com.ces.exam.security.UserDetailsImpl;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import com.ces.exam.exception.ResourceNotFoundException;
 import com.ces.exam.exception.ValidationException;
@@ -67,8 +70,34 @@ public class UserService {
     public void deactivateUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        Long currentId = currentUserId();
+        if (currentId != null && currentId.equals(id)) {
+            throw new ValidationException("Öz hesabınızı deaktiv edə bilməzsiniz.");
+        }
         user.setStatus("INACTIVE");
         userRepository.save(user);
+    }
+
+    public void activateUser(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        user.setStatus("ACTIVE");
+        userRepository.save(user);
+    }
+
+    public void resetPassword(Long id, String newPassword) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        userRepository.save(user);
+    }
+
+    private Long currentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth != null && auth.getPrincipal() instanceof UserDetailsImpl ud) {
+            return ud.getUser().getId();
+        }
+        return null;
     }
 
     public UserResponse getUserById(Long id) {

@@ -6,4 +6,10 @@ import java.util.List;
 
 public interface TopicRepository extends JpaRepository<Topic, Long> {
     List<Topic> findByCategoryId(Long categoryId);
+
+    List<Topic> findByCategoryIdOrderByNameAsc(Long categoryId);
+
+    boolean existsByCategoryId(Long categoryId);
+
+    long countByCategoryId(Long categoryId);
 }

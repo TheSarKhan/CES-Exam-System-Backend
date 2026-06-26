@@ -59,7 +59,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             if (userEmail != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = this.userDetailsService.loadUserByUsername(userEmail);
 
-                if (jwtUtil.validateToken(jwt, userDetails)) {
+                // A still-valid token must NOT keep a deactivated/locked account signed in.
+                // Re-checking status on every request makes activate/deactivate take effect
+                // immediately, without waiting for the JWT to expire.
+                if (jwtUtil.validateToken(jwt, userDetails)
+                        && userDetails.isEnabled() && userDetails.isAccountNonLocked()) {
                     UsernamePasswordAuthenticationToken authToken = new UsernamePasswordAuthenticationToken(
                             userDetails,
                             null,

@@ -35,6 +35,11 @@ public class ExamSessionQuestion {
     @Column(name = "is_correct")
     private Boolean isCorrect;
 
+    // Points the answer earned. For auto-graded answers this is full score (correct)
+    // or 0 (wrong). For open-ended answers it stays null until an admin grades it.
+    @Column(name = "awarded_score", precision = 5, scale = 2)
+    private java.math.BigDecimal awardedScore;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public ExamSession getSession() { return session; }
@@ -49,4 +54,6 @@ public class ExamSessionQuestion {
     public void setTextAnswer(String textAnswer) { this.textAnswer = textAnswer; }
     public Boolean getIsCorrect() { return isCorrect; }
     public void setIsCorrect(Boolean isCorrect) { this.isCorrect = isCorrect; }
+    public java.math.BigDecimal getAwardedScore() { return awardedScore; }
+    public void setAwardedScore(java.math.BigDecimal awardedScore) { this.awardedScore = awardedScore; }
 }
