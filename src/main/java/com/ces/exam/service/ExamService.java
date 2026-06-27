@@ -388,7 +388,16 @@ public class ExamService {
     }
 
     @Transactional
+    /** Reject an inverted schedule (end before/at start) at assignment time. */
+    private void validateAssignmentWindow(ExamAssignmentRequest request) {
+        if (request.getStartDate() != null && request.getEndDate() != null
+                && !request.getEndDate().isAfter(request.getStartDate())) {
+            throw new ValidationException("Son tarix başlama tarixindən sonra olmalıdır.");
+        }
+    }
+
     public ExamAssignmentResponse assignExam(ExamAssignmentRequest request) {
+        validateAssignmentWindow(request);
         Exam exam = examRepository.findById(request.getExamId())
                 .orElseThrow(() -> new ResourceNotFoundException("Exam not found"));
 
@@ -482,6 +491,7 @@ public class ExamService {
 
     @Transactional
     public com.ces.exam.payload.response.BulkAssignmentResponse assignInternal(ExamAssignmentRequest request) {
+        validateAssignmentWindow(request);
         Exam exam = examRepository.findById(request.getExamId())
                 .orElseThrow(() -> new ResourceNotFoundException("Exam not found"));
 
