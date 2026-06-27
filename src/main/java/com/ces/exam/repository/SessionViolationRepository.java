@@ -3,12 +3,19 @@ package com.ces.exam.repository;
 import com.ces.exam.model.entity.SessionViolation;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
 public interface SessionViolationRepository extends JpaRepository<SessionViolation, Long> {
     List<SessionViolation> findBySessionIdOrderByOccurredAtAsc(Long sessionId);
     long countBySessionId(Long sessionId);
+
+    // Violation counts for every session of an exam in ONE query (avoids N+1 on the
+    // results page). Returns rows of [sessionId, count].
+    @Query("SELECT v.session.id, COUNT(v) FROM SessionViolation v " +
+           "WHERE v.session.assignment.exam.id = :examId GROUP BY v.session.id")
+    List<Object[]> violationCountsForExam(@Param("examId") Long examId);
 
     // Sessions that recorded proctoring violations, most-flagged first.
     // Returns: [sessionId, firstName, lastName, examId, examTitle, violationCount]

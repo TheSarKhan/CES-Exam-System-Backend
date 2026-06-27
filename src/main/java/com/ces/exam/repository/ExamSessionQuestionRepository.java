@@ -17,6 +17,14 @@ public interface ExamSessionQuestionRepository extends JpaRepository<ExamSession
            "AND sq.session.assignment.exam.type = com.ces.exam.model.enums.ExamType.EXAM")
     long countPendingGradingForSession(@Param("sessionId") Long sessionId);
 
+    // Pending-grading counts for every session of an exam in ONE query (avoids N+1
+    // on the results page). Returns rows of [sessionId, count].
+    @Query("SELECT sq.session.id, COUNT(sq) FROM ExamSessionQuestion sq " +
+           "WHERE sq.session.assignment.exam.id = :examId AND sq.isCorrect IS NULL " +
+           "AND sq.session.assignment.exam.type = com.ces.exam.model.enums.ExamType.EXAM " +
+           "GROUP BY sq.session.id")
+    List<Object[]> pendingGradingCountsForExam(@Param("examId") Long examId);
+
     // Per-question outcome aggregation across all COMPLETED sessions of an exam.
     // Returns: [questionId, text, type, difficulty, correct, wrong, pending, total]
     @Query("SELECT q.id, q.text, q.type, q.difficulty, " +

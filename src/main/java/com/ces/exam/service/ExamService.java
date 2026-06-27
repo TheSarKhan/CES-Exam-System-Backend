@@ -215,6 +215,16 @@ public class ExamService {
         Exam exam = examRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Exam not found"));
 
+        // Batch the per-session counts into two grouped queries instead of 2 per row (N+1).
+        Map<Long, Integer> pendingBySession = new java.util.HashMap<>();
+        for (Object[] r : examSessionQuestionRepository.pendingGradingCountsForExam(id)) {
+            pendingBySession.put((Long) r[0], ((Number) r[1]).intValue());
+        }
+        Map<Long, Integer> violationsBySession = new java.util.HashMap<>();
+        for (Object[] r : sessionViolationRepository.violationCountsForExam(id)) {
+            violationsBySession.put((Long) r[0], ((Number) r[1]).intValue());
+        }
+
         List<com.ces.exam.payload.response.ExamResultsResponse.SessionRow> sessions =
                 examSessionRepository.findByExamIdWithUser(id).stream()
                         .map(s -> new com.ces.exam.payload.response.ExamResultsResponse.SessionRow(
@@ -226,9 +236,9 @@ public class ExamService {
                                 s.getStartTime(),
                                 s.getEndTime(),
                                 s.getStatus() == SessionStatus.COMPLETED
-                                        ? (int) examSessionQuestionRepository.countPendingGradingForSession(s.getId())
+                                        ? pendingBySession.getOrDefault(s.getId(), 0)
                                         : 0,
-                                (int) sessionViolationRepository.countBySessionId(s.getId())))
+                                violationsBySession.getOrDefault(s.getId(), 0)))
                         .collect(Collectors.toList());
 
         // Hide unused links to recipients who already used a link for this exam — they're redundant.
