@@ -134,6 +134,12 @@ public class ExamService {
                 .collect(Collectors.toList());
     }
 
+    /** Paginated variant (opt-in via ?page=). */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<ExamResponse> getAllExams(org.springframework.data.domain.Pageable pageable) {
+        return examRepository.findAll(pageable).map(e -> attachStats(mapToResponse(e), e));
+    }
+
     @Transactional(readOnly = true)
     public ExamResponse getExam(Long id) {
         Exam exam = examRepository.findById(id)

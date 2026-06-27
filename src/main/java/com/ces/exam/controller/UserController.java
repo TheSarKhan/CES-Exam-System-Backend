@@ -3,6 +3,7 @@ package com.ces.exam.controller;
 import com.ces.exam.payload.request.UserRequest;
 import com.ces.exam.payload.response.UserResponse;
 import com.ces.exam.service.UserService;
+import com.ces.exam.util.PageRequests;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -21,9 +22,13 @@ public class UserController {
         this.userService = userService;
     }
 
+    // Returns the full list by default (the admin UI filters client-side); pass
+    // ?page=N (optionally &size=) to get a paginated envelope instead.
     @GetMapping
-    public ResponseEntity<List<UserResponse>> getAllUsers() {
-        return ResponseEntity.ok(userService.getAllUsers());
+    public ResponseEntity<?> getAllUsers(@RequestParam(required = false) Integer page,
+                                         @RequestParam(required = false) Integer size) {
+        if (page == null) return ResponseEntity.ok(userService.getAllUsers());
+        return ResponseEntity.ok(userService.getAllUsers(PageRequests.of(page, size)));
     }
 
     @PostMapping

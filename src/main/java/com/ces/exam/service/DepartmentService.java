@@ -44,6 +44,12 @@ public class DepartmentService {
                 .collect(Collectors.toList());
     }
 
+    /** Paginated variant (opt-in via ?page=). */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<DepartmentResponse> getAllDepartments(org.springframework.data.domain.Pageable pageable) {
+        return departmentRepository.findAll(pageable).map(this::mapToResponse);
+    }
+
     @Transactional(readOnly = true)
     public DepartmentDetailResponse getDepartmentDetail(Long id) {
         Department dep = departmentRepository.findById(id)

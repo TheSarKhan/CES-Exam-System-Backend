@@ -13,6 +13,7 @@ import com.ces.exam.payload.response.SessionResultResponse;
 import com.ces.exam.payload.response.ViolationResponse;
 import com.ces.exam.service.ExamService;
 import com.ces.exam.service.ExamSessionService;
+import com.ces.exam.util.PageRequests;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -33,9 +34,12 @@ public class ExamController {
         this.examSessionService = examSessionService;
     }
 
+    // Full list by default; pass ?page=N (optionally &size=) for a paginated envelope.
     @GetMapping
-    public ResponseEntity<List<ExamResponse>> getAllExams() {
-        return ResponseEntity.ok(examService.getAllExams());
+    public ResponseEntity<?> getAllExams(@RequestParam(required = false) Integer page,
+                                         @RequestParam(required = false) Integer size) {
+        if (page == null) return ResponseEntity.ok(examService.getAllExams());
+        return ResponseEntity.ok(examService.getAllExams(PageRequests.of(page, size)));
     }
 
     @GetMapping("/{id}")

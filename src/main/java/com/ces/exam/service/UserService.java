@@ -42,6 +42,11 @@ public class UserService {
                 .collect(Collectors.toList());
     }
 
+    /** Paginated variant (opt-in via ?page=). */
+    public org.springframework.data.domain.Page<UserResponse> getAllUsers(org.springframework.data.domain.Pageable pageable) {
+        return userRepository.findAll(pageable).map(this::mapToResponse);
+    }
+
     public UserResponse createUser(UserRequest request) {
         User user = new User();
         user.setEmail(request.getEmail());
