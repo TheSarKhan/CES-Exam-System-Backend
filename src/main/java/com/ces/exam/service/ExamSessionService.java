@@ -310,21 +310,46 @@ public class ExamSessionService {
                 .anyMatch(v -> v != null && "CRITICAL".equalsIgnoreCase(v.getSeverity()));
     }
 
+    /** Violation types the client is allowed to report; anything else is dropped. */
+    private static final Set<String> ALLOWED_VIOLATION_TYPES = Set.of(
+            "TAB_SWITCH", "WINDOW_BLUR", "FULLSCREEN_EXIT", "COPY", "PASTE",
+            "CONTEXT_MENU", "DEVTOOLS", "CRITICAL");
+    private static final Set<String> ALLOWED_SEVERITIES = Set.of("LOGGED", "WARNING", "CRITICAL");
+    private static final int MAX_VIOLATIONS_STORED = 200;
+
     private void saveViolations(ExamSession session, List<SubmitSessionRequest.ViolationRequest> violations) {
         if (violations == null || violations.isEmpty()) return;
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime sessionStart = session.getStartTime() != null ? session.getStartTime() : now;
+
         List<SessionViolation> entities = new ArrayList<>();
         for (SubmitSessionRequest.ViolationRequest v : violations) {
             if (v.getType() == null) continue;
-            SessionViolation sv = new SessionViolation();
-            sv.setSession(session);
-            sv.setType(v.getType());
-            sv.setLabel(v.getLabel());
-            sv.setSeverity(v.getSeverity() != null ? v.getSeverity() : "LOGGED");
+            // Whitelist the type — never persist arbitrary client-supplied strings.
+            String type = v.getType().trim().toUpperCase();
+            if (!ALLOWED_VIOLATION_TYPES.contains(type)) continue;
+
+            String severity = v.getSeverity() != null ? v.getSeverity().trim().toUpperCase() : "LOGGED";
+            if (!ALLOWED_SEVERITIES.contains(severity)) severity = "LOGGED";
+
+            // Clamp the client timestamp into the session window so a forged/skewed
+            // clock can't write violations dated outside the exam.
             LocalDateTime when = v.getAt() != null
                     ? LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(v.getAt()), java.time.ZoneId.systemDefault())
-                    : LocalDateTime.now();
+                    : now;
+            if (when.isBefore(sessionStart)) when = sessionStart;
+            if (when.isAfter(now)) when = now;
+
+            SessionViolation sv = new SessionViolation();
+            sv.setSession(session);
+            sv.setType(type);
+            sv.setLabel(v.getLabel() != null && v.getLabel().length() > 200
+                    ? v.getLabel().substring(0, 200) : v.getLabel());
+            sv.setSeverity(severity);
             sv.setOccurredAt(when);
             entities.add(sv);
+
+            if (entities.size() >= MAX_VIOLATIONS_STORED) break; // cap to prevent flooding
         }
         if (!entities.isEmpty()) violationRepository.saveAll(entities);
     }

@@ -52,6 +52,19 @@ spring:
 server:
   port: 8080
 
+# Expose only a liveness/readiness health endpoint (no sensitive details) for
+# Docker/load-balancer probes at /actuator/health.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+      probes:
+        enabled: true
+
 # Application-level settings used when composing candidate e-mails.
 app:
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:3000}
