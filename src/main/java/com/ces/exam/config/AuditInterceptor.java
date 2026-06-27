@@ -34,11 +34,13 @@ public class AuditInterceptor implements HandlerInterceptor {
                                 Object handler, Exception ex) {
         try {
             String method = request.getMethod();
-            if (!isMutation(method)) return;
-
             String path = request.getRequestURI();
             if (path == null || !path.startsWith("/api/v1/")) return;
             if (path.startsWith("/api/v1/admin/audit")) return; // never audit reading the audit
+
+            // Record mutations, plus reads of sensitive data (results, analytics, reports).
+            boolean sensitiveRead = "GET".equals(method) && isSensitiveRead(path);
+            if (!isMutation(method) && !sensitiveRead) return;
 
             AuditLog log = new AuditLog();
 
@@ -70,6 +72,14 @@ public class AuditInterceptor implements HandlerInterceptor {
                 || "PATCH".equals(method) || "DELETE".equals(method);
     }
 
+    /** Reads worth auditing for compliance: exam results, analytics, reports, proctoring. */
+    private boolean isSensitiveRead(String path) {
+        String l = path.toLowerCase();
+        return l.contains("/results") || l.contains("/result")
+                || l.contains("/analytics") || l.contains("/violations")
+                || l.startsWith("/api/v1/reports");
+    }
+
     private String roleLabel(User u) {
         Set<String> names = u.getRoles().stream().map(Role::getName).collect(Collectors.toSet());
         if (names.contains("ROLE_ADMIN")) return "Administrator";
@@ -89,6 +99,7 @@ public class AuditInterceptor implements HandlerInterceptor {
             case "departments": return "Şöbələr";
             case "exams": return "İmtahanlar";
             case "question-bank": return "Sual bankı";
+            case "reports": return "Hesabatlar";
             case "auth": return "Autentifikasiya";
             case "account": return "Hesab";
             case "roles": return "Rollar";
@@ -115,6 +126,7 @@ public class AuditInterceptor implements HandlerInterceptor {
         if (lower.contains("/notifications/read")) return "Oxundu işarələmə";
         if (lower.contains("/start") || lower.endsWith("/sessions")) return "İmtahan başlatma";
         switch (method) {
+            case "GET": return "Baxış";
             case "POST": return "Yaratma";
             case "PUT":
             case "PATCH": return "Yeniləmə";
