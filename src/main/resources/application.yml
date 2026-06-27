@@ -60,6 +60,9 @@ app:
     from-name: ${MAIL_FROM_NAME:CES Assessment}
 
 jwt:
+  # HMAC-SHA256 signing secret. MUST be overridden in production via the
+  # JWT_SECRET environment variable; the fallback is for local dev only.
+  secret: ${JWT_SECRET:ces_exam_system_secret_key_which_must_be_very_long}
   expiration:
     ms: 86400000
 

@@ -3,12 +3,14 @@ package com.ces.exam.security;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
+import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.List;
 import java.util.function.Function;
@@ -17,12 +19,19 @@ import java.util.stream.Collectors;
 @Component
 public class JwtUtil {
 
-    // 256-bit secret key for HMAC-SHA256 (in production this should be in env vars)
-    private final String secretString = "ces_exam_system_secret_key_which_must_be_very_long";
-    private final SecretKey secretKey = Keys.hmacShaKeyFor(secretString.getBytes());
+    // HMAC-SHA256 signing secret, injected from config (jwt.secret / JWT_SECRET env).
+    @Value("${jwt.secret}")
+    private String secretString;
+
+    private SecretKey secretKey;
 
     @Value("${jwt.expiration.ms:86400000}")
     private long jwtExpirationMs; // Default 24h
+
+    @PostConstruct
+    void init() {
+        this.secretKey = Keys.hmacShaKeyFor(secretString.getBytes(StandardCharsets.UTF_8));
+    }
 
     public String generateToken(UserDetails userDetails) {
         List<String> roles = userDetails.getAuthorities().stream()

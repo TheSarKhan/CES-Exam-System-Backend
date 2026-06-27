@@ -97,10 +97,11 @@ public class ExamSessionService {
         ExamAssignment assignment = resolveAssignmentByToken(token);
         validateAssignmentDates(assignment);
 
-        // Single-use: a consumed link can no longer start a new session.
-        if (assignment.isConsumed()) {
+        // Single-use, race-safe: only the request that flips consumed false→true wins.
+        if (assignmentRepository.markConsumed(assignment.getId()) == 0) {
             throw new ValidationException("Bu link artıq istifadə olunub.");
         }
+        assignment.setConsumed(true); // keep the in-memory entity consistent with the DB
 
         User user = assignment.getAssignedUser();
         if (user == null) {
@@ -108,7 +109,6 @@ public class ExamSessionService {
             user = candidateService.create(candidateName);
             assignment.setAssignedUser(user);
         }
-        assignment.setConsumed(true);
         assignmentRepository.save(assignment);
 
         return startSessionForAssignment(assignment, user);
@@ -221,6 +221,10 @@ public class ExamSessionService {
             throw new ValidationException("Session already submitted");
         }
 
+        // Server-side time-limit guard: the client timer can be bypassed, so flag a
+        // submission that arrives past the exam's duration window (plus a small grace).
+        boolean lateSubmission = isPastDuration(session);
+
         Map<Long, SessionAnswerRequest> answerMap = request.getAnswers().stream()
                 .collect(Collectors.toMap(SessionAnswerRequest::getQuestionId, a -> a, (a, b) -> b));
 
@@ -232,17 +236,33 @@ public class ExamSessionService {
             SessionAnswerRequest answer = answerMap.get(question.getId());
 
             if (answer != null) {
+                List<QuestionOption> validOptions = question.getOptions() != null
+                        ? question.getOptions() : List.of();
                 if (answer.getSelectedOptionId() != null) {
-                    QuestionOption option = questionOptionRepository.findById(answer.getSelectedOptionId())
-                            .orElseThrow(() -> new ResourceNotFoundException("Option not found"));
+                    // Only accept an option that actually belongs to THIS question — prevents
+                    // submitting a foreign option id to tamper with grading.
+                    QuestionOption option = validOptions.stream()
+                            .filter(o -> o.getId().equals(answer.getSelectedOptionId()))
+                            .findFirst()
+                            .orElseThrow(() -> new ValidationException("Seçilmiş variant bu suala aid deyil"));
                     sq.setSelectedOption(option);
                 }
                 if (answer.getSelectedOptionIds() != null && !answer.getSelectedOptionIds().isEmpty()) {
-                    Set<QuestionOption> options = new HashSet<>(questionOptionRepository.findAllById(answer.getSelectedOptionIds()));
+                    Set<Long> requested = new HashSet<>(answer.getSelectedOptionIds());
+                    Set<QuestionOption> options = validOptions.stream()
+                            .filter(o -> requested.contains(o.getId()))
+                            .collect(Collectors.toSet());
+                    if (options.size() != requested.size()) {
+                        throw new ValidationException("Seçilmiş variantlardan biri bu suala aid deyil");
+                    }
                     sq.setSelectedOptions(options);
                 }
                 if (answer.getTextAnswer() != null) {
-                    sq.setTextAnswer(answer.getTextAnswer());
+                    String text = answer.getTextAnswer();
+                    if (text.length() > MAX_TEXT_ANSWER_LENGTH) {
+                        text = text.substring(0, MAX_TEXT_ANSWER_LENGTH);
+                    }
+                    sq.setTextAnswer(text);
                 }
             }
 
@@ -273,6 +293,8 @@ public class ExamSessionService {
         // i.e. the exam was auto-terminated rather than submitted by the candidate.
         if (wasProctoringTerminated(request.getViolations())) {
             session.setTerminationReason("PROCTORING");
+        } else if (lateSubmission) {
+            session.setTerminationReason("TIMEOUT");
         }
         sessionRepository.save(session);
 
@@ -516,6 +538,22 @@ public class ExamSessionService {
         if (assignment.getEndDate() != null && now.isAfter(assignment.getEndDate())) {
             throw new ValidationException("Exam deadline has passed");
         }
+    }
+
+    /** Largest text answer we persist; guards against multi-megabyte answer DoS. */
+    private static final int MAX_TEXT_ANSWER_LENGTH = 50_000;
+
+    /** Grace window (seconds) added to the duration to absorb clock skew / network lag. */
+    private static final long SUBMIT_GRACE_SECONDS = 30;
+
+    /** True when this submission arrives after the exam's allowed duration window. */
+    private boolean isPastDuration(ExamSession session) {
+        Integer minutes = session.getAssignment().getExam().getDurationMinutes();
+        if (minutes == null || minutes <= 0 || session.getStartTime() == null) {
+            return false; // untimed exam → nothing to enforce
+        }
+        LocalDateTime deadline = session.getStartTime().plusMinutes(minutes).plusSeconds(SUBMIT_GRACE_SECONDS);
+        return LocalDateTime.now().isAfter(deadline);
     }
 
     private Boolean evaluateAnswer(Question question, ExamSessionQuestion sq) {

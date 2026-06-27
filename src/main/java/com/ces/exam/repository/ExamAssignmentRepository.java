@@ -2,6 +2,7 @@ package com.ces.exam.repository;
 
 import com.ces.exam.model.entity.ExamAssignment;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -24,6 +25,12 @@ public interface ExamAssignmentRepository extends JpaRepository<ExamAssignment, 
     @Query("SELECT a FROM ExamAssignment a JOIN FETCH a.exam LEFT JOIN FETCH a.assignedUser " +
            "WHERE a.accessToken = :token")
     Optional<ExamAssignment> findByAccessToken(@Param("token") String token);
+
+    // Atomically mark a link consumed. Returns 1 only for the caller that won the race,
+    // 0 if it was already consumed — the single-use guarantee even under concurrent clicks.
+    @Modifying
+    @Query("UPDATE ExamAssignment a SET a.consumed = true WHERE a.id = :id AND a.consumed = false")
+    int markConsumed(@Param("id") Long id);
 
     boolean existsByExamIdAndAssignedUserId(Long examId, Long userId);
 
