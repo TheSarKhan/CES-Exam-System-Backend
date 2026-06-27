@@ -112,12 +112,14 @@ public class ExamService {
         q.setTopic(null);
         q.setType(item.getType());
         q.setText(item.getText());
+        q.setImageUrl(item.getImageUrl());
         q.setScore(item.getScore());
         q.setDifficulty(item.getDifficulty() != null ? item.getDifficulty() : Difficulty.MEDIUM);
         if (item.getOptions() != null) {
             List<QuestionOption> options = item.getOptions().stream().map(optReq -> {
                 QuestionOption opt = new QuestionOption();
                 opt.setText(optReq.getText());
+                opt.setImageUrl(optReq.getImageUrl());
                 opt.setCorrect(optReq.getIsCorrect());
                 opt.setSortOrder(optReq.getSortOrder());
                 return opt;
@@ -569,7 +571,7 @@ public class ExamService {
                             .collect(Collectors.toList());
                 }
                 return new ExamResponse.ExamQuestionResponse(
-                        q.getId(), q.getType().name(), q.getText(), q.getScore(),
+                        q.getId(), q.getType().name(), q.getText(), q.getImageUrl(), q.getScore(),
                         q.getDifficulty() != null ? q.getDifficulty().name() : null,
                         q.getOwnerExam() == null, options);
             }).collect(Collectors.toList());

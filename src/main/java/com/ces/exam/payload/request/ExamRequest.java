@@ -59,6 +59,7 @@ public class ExamRequest {
 
         private QuestionType type;
         private String text;
+        private String imageUrl;
         private BigDecimal score;
         private Difficulty difficulty;
         private List<QuestionOptionRequest> options;
@@ -69,6 +70,8 @@ public class ExamRequest {
         public void setType(QuestionType type) { this.type = type; }
         public String getText() { return text; }
         public void setText(String text) { this.text = text; }
+        public String getImageUrl() { return imageUrl; }
+        public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
         public BigDecimal getScore() { return score; }
         public void setScore(BigDecimal score) { this.score = score; }
         public Difficulty getDifficulty() { return difficulty; }

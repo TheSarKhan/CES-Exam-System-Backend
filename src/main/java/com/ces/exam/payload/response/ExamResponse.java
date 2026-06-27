@@ -83,16 +83,18 @@ public class ExamResponse {
         private Long questionId;
         private String type;
         private String text;
+        private String imageUrl;
         private BigDecimal score;
         private String difficulty;
         private boolean fromBank;
         private List<QuestionOptionResponse> options;
 
-        public ExamQuestionResponse(Long questionId, String type, String text, BigDecimal score,
+        public ExamQuestionResponse(Long questionId, String type, String text, String imageUrl, BigDecimal score,
                                     String difficulty, boolean fromBank, List<QuestionOptionResponse> options) {
             this.questionId = questionId;
             this.type = type;
             this.text = text;
+            this.imageUrl = imageUrl;
             this.score = score;
             this.difficulty = difficulty;
             this.fromBank = fromBank;
@@ -102,6 +104,7 @@ public class ExamResponse {
         public Long getQuestionId() { return questionId; }
         public String getType() { return type; }
         public String getText() { return text; }
+        public String getImageUrl() { return imageUrl; }
         public BigDecimal getScore() { return score; }
         public String getDifficulty() { return difficulty; }
         public boolean isFromBank() { return fromBank; }
