@@ -47,6 +47,16 @@ public class UserService {
         return userRepository.findAll(pageable).map(this::mapToResponse);
     }
 
+    /** Server-side search/filter/paginate for the admin users list. */
+    public org.springframework.data.domain.Page<UserResponse> searchUsers(
+            String search, String status, Long departmentId, String roleFilter,
+            org.springframework.data.domain.Pageable pageable) {
+        String s = (search == null || search.isBlank()) ? null : "%" + search.trim().toLowerCase() + "%";
+        String st = (status == null || status.isBlank() || "all".equalsIgnoreCase(status)) ? null : status;
+        String rf = (roleFilter == null || roleFilter.isBlank()) ? "ALL" : roleFilter.toUpperCase();
+        return userRepository.search(s, st, departmentId, rf, pageable).map(this::mapToResponse);
+    }
+
     public UserResponse createUser(UserRequest request) {
         User user = new User();
         user.setEmail(request.getEmail());

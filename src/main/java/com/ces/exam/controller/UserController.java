@@ -22,13 +22,25 @@ public class UserController {
         this.userService = userService;
     }
 
-    // Returns the full list by default (the admin UI filters client-side); pass
-    // ?page=N (optionally &size=) to get a paginated envelope instead.
+    // Returns the full list by default (legacy); pass ?page=N for a paginated envelope.
     @GetMapping
     public ResponseEntity<?> getAllUsers(@RequestParam(required = false) Integer page,
                                          @RequestParam(required = false) Integer size) {
         if (page == null) return ResponseEntity.ok(userService.getAllUsers());
         return ResponseEntity.ok(userService.getAllUsers(PageRequests.of(page, size)));
+    }
+
+    // Server-side search/filter/paginate for the admin users table.
+    // role: ALL | PLATFORM | ADMIN | EMPLOYEE | CANDIDATE
+    @GetMapping("/search")
+    public ResponseEntity<org.springframework.data.domain.Page<com.ces.exam.payload.response.UserResponse>> searchUsers(
+            @RequestParam(required = false) String search,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) Long departmentId,
+            @RequestParam(required = false) String role,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        return ResponseEntity.ok(userService.searchUsers(search, status, departmentId, role, PageRequests.of(page, size)));
     }
 
     @PostMapping
