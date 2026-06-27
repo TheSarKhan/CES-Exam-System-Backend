@@ -12,11 +12,13 @@ RUN mvn -q -B clean package -DskipTests
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 RUN addgroup -S ces && adduser -S ces -G ces && apk add --no-cache wget
+# Pre-create the uploads dir owned by ces; a named volume mounted here inherits
+# this ownership, so the non-root app can write uploaded images.
+RUN mkdir -p /app/uploads && chown ces:ces /app/uploads
 COPY --from=build --chown=ces:ces /workspace/target/*.jar /app/app.jar
 USER ces
 EXPOSE 8080
 ENV JAVA_OPTS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=70.0"
-# No Spring Actuator in this app — probe a public endpoint instead.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=70s --retries=6 \
-  CMD wget -qO- http://localhost:8080/api/v1/public/settings >/dev/null 2>&1 || exit 1
+  CMD wget -qO- http://localhost:8080/actuator/health >/dev/null 2>&1 || exit 1
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]

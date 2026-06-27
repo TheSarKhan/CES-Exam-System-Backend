@@ -292,6 +292,7 @@ public class QuestionBankService {
     private void applyQuestionFields(Question question, QuestionRequest request) {
         question.setType(request.getType());
         question.setText(request.getText());
+        question.setImageUrl(request.getImageUrl());
         question.setScore(request.getScore());
         question.setDifficulty(request.getDifficulty() != null ? request.getDifficulty() : Difficulty.MEDIUM);
     }
@@ -303,6 +304,7 @@ public class QuestionBankService {
         return request.getOptions().stream().map(optReq -> {
             QuestionOption opt = new QuestionOption();
             opt.setText(optReq.getText());
+            opt.setImageUrl(optReq.getImageUrl());
             opt.setCorrect(optReq.getIsCorrect());
             opt.setSortOrder(optReq.getSortOrder());
             return opt;
@@ -313,11 +315,11 @@ public class QuestionBankService {
         List<QuestionOptionResponse> options = null;
         if (q.getOptions() != null) {
             options = q.getOptions().stream()
-                    .map(o -> new QuestionOptionResponse(o.getId(), o.getText(), o.getCorrect(), o.getSortOrder()))
+                    .map(o -> new QuestionOptionResponse(o.getId(), o.getText(), o.getImageUrl(), o.getCorrect(), o.getSortOrder()))
                     .collect(Collectors.toList());
         }
         return new QuestionResponse(q.getId(), q.getTopic() != null ? q.getTopic().getId() : null,
-                q.getType().name(), q.getText(),
+                q.getType().name(), q.getText(), q.getImageUrl(),
                 q.getScore(),
                 q.getDifficulty() != null ? q.getDifficulty().name() : Difficulty.MEDIUM.name(),
                 q.getActive(), options);

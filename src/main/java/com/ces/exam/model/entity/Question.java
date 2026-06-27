@@ -31,6 +31,10 @@ public class Question {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String text;
 
+    // Optional image shown with the question (IMAGE_QUESTION); a public URL like /api/v1/public/images/{file}.
+    @Column(name = "image_url", length = 512)
+    private String imageUrl;
+
     @Column(precision = 5, scale = 2)
     private BigDecimal score = BigDecimal.ONE;
 
@@ -64,6 +68,8 @@ public class Question {
     public void setType(QuestionType type) { this.type = type; }
     public String getText() { return text; }
     public void setText(String text) { this.text = text; }
+    public String getImageUrl() { return imageUrl; }
+    public void setImageUrl(String imageUrl) { this.imageUrl = imageUrl; }
     public BigDecimal getScore() { return score; }
     public void setScore(BigDecimal score) { this.score = score; }
     public Difficulty getDifficulty() { return difficulty; }

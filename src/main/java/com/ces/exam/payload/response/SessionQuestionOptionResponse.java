@@ -6,15 +6,18 @@ import java.util.List;
 public class SessionQuestionOptionResponse {
     private Long id;
     private String text;
+    private String imageUrl;
     private Integer sortOrder;
 
-    public SessionQuestionOptionResponse(Long id, String text, Integer sortOrder) {
+    public SessionQuestionOptionResponse(Long id, String text, String imageUrl, Integer sortOrder) {
         this.id = id;
         this.text = text;
+        this.imageUrl = imageUrl;
         this.sortOrder = sortOrder;
     }
 
     public Long getId() { return id; }
     public String getText() { return text; }
+    public String getImageUrl() { return imageUrl; }
     public Integer getSortOrder() { return sortOrder; }
 }

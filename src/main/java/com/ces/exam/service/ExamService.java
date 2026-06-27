@@ -539,7 +539,7 @@ public class ExamService {
                 List<QuestionOptionResponse> options = null;
                 if (q.getOptions() != null) {
                     options = q.getOptions().stream()
-                            .map(o -> new QuestionOptionResponse(o.getId(), o.getText(), o.getCorrect(), o.getSortOrder()))
+                            .map(o -> new QuestionOptionResponse(o.getId(), o.getText(), o.getImageUrl(), o.getCorrect(), o.getSortOrder()))
                             .collect(Collectors.toList());
                 }
                 return new ExamResponse.ExamQuestionResponse(

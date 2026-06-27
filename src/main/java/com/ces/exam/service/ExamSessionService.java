@@ -630,13 +630,14 @@ public class ExamSessionService {
                 ordered.sort(Comparator.comparingInt(o -> Objects.hash(sessionId, question.getId(), o.getId())));
             }
             options = ordered.stream()
-                    .map(o -> new SessionQuestionOptionResponse(o.getId(), o.getText(), o.getSortOrder()))
+                    .map(o -> new SessionQuestionOptionResponse(o.getId(), o.getText(), o.getImageUrl(), o.getSortOrder()))
                     .collect(Collectors.toList());
         }
         return new SessionQuestionResponse(
                 question.getId(),
                 question.getType().name(),
                 question.getText(),
+                question.getImageUrl(),
                 question.getScore(),
                 options
         );

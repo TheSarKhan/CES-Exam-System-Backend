@@ -8,17 +8,19 @@ public class QuestionResponse {
     private Long topicId;
     private String type;
     private String text;
+    private String imageUrl;
     private BigDecimal score;
     private String difficulty;
     private Boolean isActive;
     private List<QuestionOptionResponse> options;
 
-    public QuestionResponse(Long id, Long topicId, String type, String text, BigDecimal score,
+    public QuestionResponse(Long id, Long topicId, String type, String text, String imageUrl, BigDecimal score,
                             String difficulty, Boolean isActive, List<QuestionOptionResponse> options) {
         this.id = id;
         this.topicId = topicId;
         this.type = type;
         this.text = text;
+        this.imageUrl = imageUrl;
         this.score = score;
         this.difficulty = difficulty;
         this.isActive = isActive;
@@ -29,6 +31,7 @@ public class QuestionResponse {
     public Long getTopicId() { return topicId; }
     public String getType() { return type; }
     public String getText() { return text; }
+    public String getImageUrl() { return imageUrl; }
     public BigDecimal getScore() { return score; }
     public String getDifficulty() { return difficulty; }
     public Boolean getIsActive() { return isActive; }

@@ -32,6 +32,12 @@ spring:
       host: localhost
       port: 6379
 
+  # Image uploads for image-based questions.
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   # SMTP — values come from environment variables (see application-local.yml for local dev).
   # When MAIL_HOST is empty the e-mail feature stays disabled and links are shared manually.
   mail:
@@ -68,6 +74,7 @@ management:
 # Application-level settings used when composing candidate e-mails.
 app:
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:3000}
+  upload-dir: ${APP_UPLOAD_DIR:/app/uploads}
   mail:
     from: ${MAIL_FROM:${MAIL_USERNAME:}}
     from-name: ${MAIL_FROM_NAME:CES Assessment}

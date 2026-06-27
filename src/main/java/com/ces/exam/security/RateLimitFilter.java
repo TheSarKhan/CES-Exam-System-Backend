@@ -37,6 +37,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String p = request.getRequestURI();
+        // Image serving is cacheable static-ish content (a page can load many at once) — don't throttle it.
+        if (p.startsWith("/api/v1/public/images/")) return true;
         return !(p.startsWith("/api/v1/auth/") || p.startsWith("/api/v1/public/"));
     }
 
