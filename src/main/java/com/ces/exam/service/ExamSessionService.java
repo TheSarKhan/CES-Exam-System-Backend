@@ -590,6 +590,7 @@ public class ExamSessionService {
                 exam.getTitle(),
                 exam.getDurationMinutes(),
                 session.getStartTime(),
+                LocalDateTime.now(),
                 questions
         );
     }
