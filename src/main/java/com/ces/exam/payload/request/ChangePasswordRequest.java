@@ -1,7 +1,7 @@
 package com.ces.exam.payload.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 
 public class ChangePasswordRequest {
 
@@ -9,7 +9,7 @@ public class ChangePasswordRequest {
     private String currentPassword;
 
     @NotBlank(message = "Yeni parol tələb olunur")
-    @Size(min = 6, message = "Yeni parol ən azı 6 simvol olmalıdır")
+    @Pattern(regexp = ValidationPatterns.PASSWORD, message = ValidationPatterns.PASSWORD_MSG)
     private String newPassword;
 
     public String getCurrentPassword() { return currentPassword; }

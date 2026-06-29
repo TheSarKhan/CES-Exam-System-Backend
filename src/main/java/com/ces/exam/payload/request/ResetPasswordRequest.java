@@ -1,11 +1,11 @@
 package com.ces.exam.payload.request;
 
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.Pattern;
 
 public class ResetPasswordRequest {
     @NotBlank(message = "Yeni parol tələb olunur")
-    @Size(min = 6, max = 100, message = "Parol ən azı 6 simvol olmalıdır")
+    @Pattern(regexp = ValidationPatterns.PASSWORD, message = ValidationPatterns.PASSWORD_MSG)
     private String password;
 
     public String getPassword() { return password; }
