@@ -85,8 +85,12 @@ public class ExamService {
         // Concrete question list: bank references + inline-authored questions.
         if (request.getQuestions() != null && !request.getQuestions().isEmpty()) {
             List<ExamQuestion> examQuestions = new ArrayList<>();
+            java.util.Set<Long> seenBankIds = new java.util.HashSet<>();
             int order = 0;
             for (ExamRequest.ExamQuestionRequest item : request.getQuestions()) {
+                if (item.getQuestionId() != null && !seenBankIds.add(item.getQuestionId())) {
+                    continue; // skip duplicate bank question reference
+                }
                 Question question;
                 if (item.getQuestionId() != null) {
                     question = questionRepository.findById(item.getQuestionId())
@@ -186,8 +190,12 @@ public class ExamService {
 
         List<ExamQuestion> rebuilt = new ArrayList<>();
         if (request.getQuestions() != null) {
+            java.util.Set<Long> seenBankIds = new java.util.HashSet<>();
             int order = 0;
             for (ExamRequest.ExamQuestionRequest item : request.getQuestions()) {
+                if (item.getQuestionId() != null && !seenBankIds.add(item.getQuestionId())) {
+                    continue; // skip duplicate bank question reference
+                }
                 Question question;
                 if (item.getQuestionId() != null) {
                     question = questionRepository.findById(item.getQuestionId())
@@ -206,6 +214,8 @@ public class ExamService {
             exam.setExamQuestions(rebuilt);
         } else {
             exam.getExamQuestions().clear();
+            // Flush orphan-removal DELETEs before INSERTs to avoid UNIQUE(exam_id, question_id) violation.
+            examRepository.flush();
             exam.getExamQuestions().addAll(rebuilt);
         }
 
